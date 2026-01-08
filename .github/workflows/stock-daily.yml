@@ -3,7 +3,7 @@ name: IDC Stock Monitor (Daily Summary)
 on:
   schedule:
     # 每天北京时间 09:00 左右（UTC 01:00）
-    - cron: "0 1 * * *"
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
 permissions:
