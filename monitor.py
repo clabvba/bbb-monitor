@@ -4,8 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-
-# ========= 从环境变量里读配置（GitHub Secrets 会传进来） =========
+# ========== 从环境变量里读取配置（GitHub Secrets 会传进来） ===========
 # 支持多个 URL，用逗号分隔：URL1,URL2,URL3...
 RAW_TARGET_URL = os.environ["TARGET_URL"]
 COOKIE = os.environ.get("COOKIE", "")  # 形如 "a=1; b=2"
@@ -15,7 +14,6 @@ MODE = os.environ.get("MODE", "realtime")  # "realtime" / "daily"
 ONLY_ON_CHANGE = os.environ.get("ONLY_ON_CHANGE", "false").lower() == "true"
 LAST_STOCK_FILE = "last_stock.json"
 # =============================================================
-
 
 def parse_cookies(cookie_str: str):
     """
@@ -31,7 +29,6 @@ def parse_cookies(cookie_str: str):
             cookies[k.strip()] = v.strip()
     return cookies
 
-
 def send_tg_message(text: str):
     """
     发 Telegram 消息（纯文本）
@@ -43,7 +40,6 @@ def send_tg_message(text: str):
     }
     r = requests.post(url, data=data, timeout=10)
     r.raise_for_status()
-
 
 def fetch_stock_from_url(url: str):
     """
@@ -64,30 +60,23 @@ def fetch_stock_from_url(url: str):
 
     result = {}
 
-    # 所有商品卡片：class 里同时有 card 和 cartitem
+    # 获取所有商品卡片（包含库存信息的部分）
     cards = soup.select("div.card.cartitem")
 
     for card in cards:
-        # 标题，例如 "HK-②"、"CA"、"DE"、"FR-①"、"FR-②"、以后新增的地区等
-        title_tag = card.find("h4")
-        if not title_tag:
+        # 获取产品名称
+        name_tag = card.find("h4")
+        if not name_tag:
             continue
+        name = name_tag.get_text(strip=True)
 
-        name = title_tag.get_text(strip=True)
-        if not name:
-            continue
-
-        # 页面里可能有多个 p.card-text，要找包含“库存”的那个
-        stock_tag = None
-        for p in card.find_all("p", class_="card-text"):
-            if "库存" in p.get_text():
-                stock_tag = p
-                break
-
+        # 获取库存信息
+        stock_tag = card.find("p", class_="card-text")
         if not stock_tag:
             continue
-
         stock_text = stock_tag.get_text(strip=True)
+
+        # 提取库存数量：找出 "库存：" 后的数字
         digits = "".join(ch for ch in stock_text if ch.isdigit())
         if not digits:
             continue
@@ -95,7 +84,6 @@ def fetch_stock_from_url(url: str):
         result[name] = int(digits)
 
     return result
-
 
 def fetch_stock():
     """
@@ -110,7 +98,6 @@ def fetch_stock():
 
     return total
 
-
 def load_last_stock():
     """
     从 last_stock.json 读取上一次库存
@@ -123,14 +110,12 @@ def load_last_stock():
     except Exception:
         return None
 
-
 def save_stock(stock_dict):
     """
     把当前库存写入 last_stock.json
     """
     with open(LAST_STOCK_FILE, "w", encoding="utf-8") as f:
         json.dump(stock_dict, f, ensure_ascii=False, indent=2)
-
 
 def diff_stock(old, new):
     """
@@ -146,49 +131,37 @@ def diff_stock(old, new):
             changes[k] = (o, n)
     return changes
 
-
 def build_full_message(stock_dict, mode: str) -> str:
     """
-    输出完整库存列表
+    输出完整库存列表，按产品类型和可用区域分组
     """
     now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    # 简单分组：名字以 HK 开头的放一组，其它一组
-    hk = {}
-    other = {}
-    for k, v in stock_dict.items():
-        if k.startswith("HK"):
-            hk[k] = v
-        else:
-            other[k] = v
+    lines = [f"📊 {mode} 库存汇总", ""]
 
-    hk = dict(sorted(hk.items(), key=lambda x: x[0]))
-    other = dict(sorted(other.items(), key=lambda x: x[0]))
+    # 定义产品类型
+    product_types = ["中国人妻", "日本女优", "避孕套", "避孕药", "赞助商", "波多野结衣"]
 
-    if mode == "daily":
-        title = "📊 IDC 每日库存汇总"
-    else:
-        title = "⏱ IDC 实时库存"
+    for product_type in product_types:
+        lines.append(f"【{product_type}】")
+        
+        # 获取该类型的商品，并按区域展示
+        for name, stock in stock_dict.items():
+            if product_type in name:
+                # 提取出区域信息
+                regions = []
+                for part in name.split("-")[2:]:
+                    if part.isalnum():
+                        regions.append(part)
 
-    lines = [title, ""]
-
-    if hk:
-        lines.append("【HK 区（避孕套）】")
-        for k, v in hk.items():
-            status = "售罄 ❌" if v == 0 else "有货 ✅"
-            lines.append(f"{k}: {v}（{status}）")
-        lines.append("")
-
-    if other:
-        lines.append("【其他区】")
-        for k, v in other.items():
-            status = "售罄 ❌" if v == 0 else "有货 ✅"
-            lines.append(f"{k}: {v}（{status}）")
-        lines.append("")
+                # 拼接区域信息
+                region_str = ", ".join(regions)
+                lines.append(f"{name}: {stock} 台 ({region_str})")
+        
+        lines.append("")  # 每个产品类型之间分隔一行
 
     lines.append(f"更新时间：{now_utc}")
     return "\n".join(lines)
-
 
 def build_change_message(changes: dict, mode: str) -> str:
     """
@@ -197,40 +170,14 @@ def build_change_message(changes: dict, mode: str) -> str:
     """
     now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    if mode == "daily":
-        title = "📊 IDC 库存变动汇总"
-    else:
-        title = "🔔 IDC 库存变动提醒"
+    lines = [f"🔔 {mode} 库存变动提醒", ""]
 
-    lines = [title, ""]
-
-    hk_lines = []
-    other_lines = []
-
-    for k in sorted(changes.keys()):
-        old, new = changes[k]
-        arrow = "↗️" if (old or 0) < (new or 0) else "↘️"
-        old_s = "无" if old is None else str(old)
-        new_s = "无" if new is None else str(new)
-        text = f"{k}: {old_s} -> {new_s} {arrow}"
-        if k.startswith("HK"):
-            hk_lines.append(text)
-        else:
-            other_lines.append(text)
-
-    if hk_lines:
-        lines.append("【HK 区（避孕套）】")
-        lines.extend(hk_lines)
-        lines.append("")
-
-    if other_lines:
-        lines.append("【其他区】")
-        lines.extend(other_lines)
-        lines.append("")
+    for k, (old, new) in sorted(changes.items()):
+        arrow = "↗️" if old < new else "↘️"
+        lines.append(f"{k}: {old} -> {new} {arrow}")
 
     lines.append(f"更新时间：{now_utc}")
     return "\n".join(lines)
-
 
 def main():
     try:
@@ -282,7 +229,6 @@ def main():
 
     print("Stock changed, sending notification.")
     send_tg_message(msg)
-
 
 if __name__ == "__main__":
     main()
