@@ -63,6 +63,7 @@ def fetch_stock_from_url(url: str):
             continue
         name = name_tag.get_text(strip=True)
 
+        # 获取库存信息
         stock_tag = card.find("p", class_="card-text")
         if not stock_tag:
             continue
@@ -118,7 +119,9 @@ def build_full_message(stock_dict, mode: str) -> str:
         lines.append(f"【{product_type}】")
         for name, stock in stock_dict.items():
             if product_type in name:
-                lines.append(f"{name}: {stock} 台")
+                # 判断库存是否为 0，显示不同的状态
+                status = "有货 ✅" if stock > 0 else "售罄 ❌"
+                lines.append(f"{name}: {stock} 台 ({status})")
         lines.append("")  # 每个产品类型之间分隔一行
 
     lines.append(f"更新时间：{now_utc}")
