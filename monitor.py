@@ -73,6 +73,9 @@ def fetch_stock_from_url(url: str):
         if not digits:
             continue
 
+        # 输出每个产品的名称和库存数量，方便调试
+        print(f"产品名称: {name}, 库存数量: {digits}")
+
         # 将库存数量和产品名称（如：避孕套-HK1）添加到结果字典中
         result[name] = int(digits)
 
