@@ -73,7 +73,7 @@ def fetch_stock_from_url(url: str):
         if not digits:
             continue
 
-        # 假设产品名称格式为：产品类型-区域 (例如：避孕套-HK1)
+        # 将库存数量和产品名称（如：避孕套-HK1）添加到结果字典中
         result[name] = int(digits)
 
     return result
@@ -120,8 +120,9 @@ def build_full_message(stock_dict, mode: str) -> str:
         lines.append(f"【{product_type}】")
         for name, stock in stock_dict.items():
             if product_type in name:
-                # 根据区域和产品类型生成具体的库存信息
-                lines.append(f"{name}: {stock} 台")
+                # 确保库存数量在消息中显示
+                status = "有货 ✅" if stock > 0 else "售罄 ❌"
+                lines.append(f"{name}: {stock} 台 ({status})")
         lines.append("")  # 每个产品类型之间分隔一行
 
     lines.append(f"更新时间：{now_utc}")
